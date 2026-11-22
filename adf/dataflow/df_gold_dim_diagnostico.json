@@ -1,0 +1,60 @@
+{
+	"name": "df_gold_dim_diagnostico",
+	"properties": {
+		"folder": {
+			"name": "gold"
+		},
+		"type": "MappingDataFlow",
+		"typeProperties": {
+			"sources": [
+				{
+					"dataset": {
+						"referenceName": "ds_dw_bronze_hospital",
+						"type": "DatasetReference"
+					},
+					"name": "origen"
+				}
+			],
+			"sinks": [
+				{
+					"dataset": {
+						"referenceName": "ds_dw_gold_dim_diagnostico",
+						"type": "DatasetReference"
+					},
+					"name": "destino"
+				}
+			],
+			"transformations": [],
+			"scriptLines": [
+				"source(output(",
+				"          codigo_icd as string,",
+				"          descripcion_patologia as string,",
+				"          nivel_severidad as string",
+				"     ),",
+				"     allowSchemaDrift: true,",
+				"     validateSchema: false,",
+				"     isolationLevel: 'READ_UNCOMMITTED',",
+				"     query: 'SELECT\\n    x.codigo_icd,\\n    ISNULL(r.descripcion, N\\'Codigo \\' + x.codigo_icd) AS descripcion_patologia,\\n    x.nivel_severidad\\nFROM (\\n    SELECT DISTINCT\\n        CAST(LTRIM(RTRIM(LEFT(icd_code, CHARINDEX(\\',\\', icd_code + \\',\\') - 1))) AS VARCHAR(50)) AS codigo_icd,\\n        CAST(ISNULL(severity, \\'Sin especificar\\') AS VARCHAR(50)) AS nivel_severidad\\n    FROM silver.diagnoses\\n    UNION\\n    SELECT \\'SIN-DX\\', \\'Sin especificar\\'\\n) x\\nLEFT JOIN (VALUES\\n    (\\'C50.911\\',  N\\'Tumor maligno de mama derecha\\'),\\n    (\\'E11.9\\',    N\\'Diabetes tipo 2 sin complicaciones\\'),\\n    (\\'F32.9\\',    N\\'Episodio depresivo mayor, no especificado\\'),\\n    (\\'I10\\',      N\\'Hipertension esencial (primaria)\\'),\\n    (\\'J45.909\\',  N\\'Asma no especificada, sin complicaciones\\'),\\n    (\\'K21.9\\',    N\\'Reflujo gastroesofagico sin esofagitis\\'),\\n    (\\'M54.5\\',    N\\'Dolor lumbar\\'),\\n    (\\'N39.0\\',    N\\'Infeccion de vias urinarias\\'),\\n    (\\'R51\\',      N\\'Cefalea\\'),\\n    (\\'S72.001A\\', N\\'Fractura del cuello del femur derecho, primera atencion\\'),\\n    (\\'SIN-DX\\',   N\\'Sin diagnostico registrado\\')\\n) r (codigo_icd, descripcion) ON r.codigo_icd = x.codigo_icd',",
+				"     format: 'query') ~> origen",
+				"origen sink(allowSchemaDrift: true,",
+				"     validateSchema: false,",
+				"     input(",
+				"          diagnostico_key as integer,",
+				"          codigo_icd as string,",
+				"          descripcion_patologia as string,",
+				"          nivel_severidad as string",
+				"     ),",
+				"     deletable:false,",
+				"     insertable:true,",
+				"     updateable:false,",
+				"     upsertable:false,",
+				"     format: 'table',",
+				"     skipDuplicateMapInputs: true,",
+				"     skipDuplicateMapOutputs: true,",
+				"     errorHandlingOption: 'allErrors',",
+				"     transactionCommit: 'single',",
+				"     reportSuccessOnError: false) ~> destino"
+			]
+		}
+	}
+}

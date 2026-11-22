@@ -1,0 +1,63 @@
+{
+	"name": "df_silver_diagnoses",
+	"properties": {
+		"folder": {
+			"name": "silver"
+		},
+		"type": "MappingDataFlow",
+		"typeProperties": {
+			"sources": [
+				{
+					"dataset": {
+						"referenceName": "ds_dw_bronze_hospital",
+						"type": "DatasetReference"
+					},
+					"name": "origen"
+				}
+			],
+			"sinks": [
+				{
+					"dataset": {
+						"referenceName": "ds_dw_silver_diagnoses",
+						"type": "DatasetReference"
+					},
+					"name": "destino"
+				}
+			],
+			"transformations": [],
+			"scriptLines": [
+				"source(output(",
+				"          diagnosis_id as integer,",
+				"          admission_id as integer,",
+				"          icd_code as string,",
+				"          diagnosis_description as string,",
+				"          severity as string",
+				"     ),",
+				"     allowSchemaDrift: true,",
+				"     validateSchema: false,",
+				"     isolationLevel: 'READ_UNCOMMITTED',",
+				"     query: 'SELECT d.diagnosis_id, d.admission_id, d.icd_code, d.diagnosis_description, d.severity\\nFROM (\\n    SELECT\\n        TRY_CAST(LTRIM(RTRIM(b.diagnosis_id)) AS INT) AS diagnosis_id,\\n        TRY_CAST(LTRIM(RTRIM(b.admission_id)) AS INT) AS admission_id,\\n        (SELECT STRING_AGG(silver.fn_ICD(s.value), \\', \\') WITHIN GROUP (ORDER BY s.ordinal)\\n         FROM STRING_SPLIT(b.icd_code, \\',\\', 1) s\\n         WHERE silver.fn_ICD(s.value) IS NOT NULL) AS icd_code,\\n        LTRIM(RTRIM(b.diagnosis_description)) AS diagnosis_description,\\n        CASE UPPER(LTRIM(RTRIM(b.severity)))\\n            WHEN \\'MILD\\' THEN \\'Mild\\' WHEN \\'MODERATE\\' THEN \\'Moderate\\'\\n            WHEN \\'SEVERE\\' THEN \\'Severe\\' WHEN \\'CRITICAL\\' THEN \\'Critical\\'\\n        END AS severity\\n    FROM bronze.diagnoses b\\n) d\\nWHERE d.diagnosis_id IS NOT NULL\\n  AND d.icd_code IS NOT NULL\\n  AND EXISTS (SELECT 1 FROM silver.admissions a WHERE a.admission_id = d.admission_id)',",
+				"     format: 'query') ~> origen",
+				"origen sink(allowSchemaDrift: true,",
+				"     validateSchema: false,",
+				"     input(",
+				"          diagnosis_id as integer,",
+				"          admission_id as integer,",
+				"          icd_code as string,",
+				"          diagnosis_description as string,",
+				"          severity as string",
+				"     ),",
+				"     deletable:false,",
+				"     insertable:true,",
+				"     updateable:false,",
+				"     upsertable:false,",
+				"     format: 'table',",
+				"     skipDuplicateMapInputs: true,",
+				"     skipDuplicateMapOutputs: true,",
+				"     errorHandlingOption: 'allErrors',",
+				"     transactionCommit: 'single',",
+				"     reportSuccessOnError: false) ~> destino"
+			]
+		}
+	}
+}

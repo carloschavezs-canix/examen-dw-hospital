@@ -1,0 +1,69 @@
+{
+	"name": "df_silver_patients",
+	"properties": {
+		"folder": {
+			"name": "silver"
+		},
+		"type": "MappingDataFlow",
+		"typeProperties": {
+			"sources": [
+				{
+					"dataset": {
+						"referenceName": "ds_dw_bronze_hospital",
+						"type": "DatasetReference"
+					},
+					"name": "origen"
+				}
+			],
+			"sinks": [
+				{
+					"dataset": {
+						"referenceName": "ds_dw_silver_patients",
+						"type": "DatasetReference"
+					},
+					"name": "destino"
+				}
+			],
+			"transformations": [],
+			"scriptLines": [
+				"source(output(",
+				"          patient_id as integer,",
+				"          full_name as string,",
+				"          gender as string,",
+				"          date_of_birth as date,",
+				"          phone as string,",
+				"          email as string,",
+				"          address as string,",
+				"          insurance_provider as string",
+				"     ),",
+				"     allowSchemaDrift: true,",
+				"     validateSchema: false,",
+				"     isolationLevel: 'READ_UNCOMMITTED',",
+				"     query: 'SELECT p.patient_id, p.full_name, p.gender, p.date_of_birth, p.phone, p.email, p.address, p.insurance_provider\\nFROM (\\n    SELECT n.*,\\n        MIN(n.patient_id) OVER (PARTITION BY LOWER(n.full_name),\\n            COALESCE(CONVERT(VARCHAR(10), n.date_of_birth, 23), CAST(n.patient_id AS VARCHAR(10)))) AS patient_id_maestro\\n    FROM (\\n        SELECT\\n            TRY_CAST(LTRIM(RTRIM(b.patient_id)) AS INT) AS patient_id,\\n            LTRIM(RTRIM(b.full_name)) AS full_name,\\n            CASE UPPER(LTRIM(RTRIM(b.gender)))\\n                WHEN \\'M\\' THEN \\'M\\' WHEN \\'MALE\\' THEN \\'M\\'\\n                WHEN \\'F\\' THEN \\'F\\' WHEN \\'FEMALE\\' THEN \\'F\\'\\n            END AS gender,\\n            CASE\\n                WHEN f.fnac < \\'1900-01-01\\' THEN NULL\\n                WHEN f.fnac > CAST(GETDATE() AS DATE) AND LTRIM(RTRIM(b.date_of_birth)) LIKE \\'[0-9][0-9]-[0-9][0-9]-[0-9][0-9]\\'\\n                     THEN DATEADD(YEAR, -100, f.fnac)\\n                WHEN f.fnac > CAST(GETDATE() AS DATE) THEN NULL\\n                ELSE f.fnac\\n            END AS date_of_birth,\\n            CASE\\n                WHEN t.tel NOT LIKE \\'%[^0-9]%\\' AND LEN(t.tel) = 10 THEN t.tel\\n                WHEN t.tel NOT LIKE \\'%[^0-9]%\\' AND LEN(t.tel) = 11 AND LEFT(t.tel, 1) = \\'1\\' THEN RIGHT(t.tel, 10)\\n            END AS phone,\\n            CASE WHEN e.mail LIKE \\'_%@_%._%\\' THEN e.mail END AS email,\\n            LTRIM(RTRIM(b.address)) AS address,\\n            CASE\\n                WHEN s.seg LIKE \\'AETNA%\\' THEN N\\'Aetna\\'\\n                WHEN s.seg LIKE \\'BLUECROSS%\\' THEN N\\'BlueCross\\'\\n                WHEN s.seg LIKE \\'CIGNA%\\' THEN N\\'Cigna\\'\\n                WHEN s.seg = \\'MEDICAID\\' THEN N\\'Medicaid\\'\\n                WHEN s.seg = \\'MEDICARE\\' THEN N\\'Medicare\\'\\n                WHEN s.seg LIKE \\'UNITED%\\' OR s.seg = \\'UHC\\' THEN N\\'UnitedHealth\\'\\n                WHEN s.seg LIKE \\'SELF%\\' THEN N\\'Self-Pay\\'\\n            END AS insurance_provider\\n        FROM bronze.patients b\\n        CROSS APPLY (SELECT silver.fn_Fecha(b.date_of_birth) AS fnac) f\\n        CROSS APPLY (SELECT REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(ISNULL(b.phone, \\'\\'))),\\n                            \\'(\\', \\'\\'), \\')\\', \\'\\'), \\'-\\', \\'\\'), \\'.\\', \\'\\'), \\' \\', \\'\\'), \\'+\\', \\'\\') AS tel) t\\n        CROSS APPLY (SELECT LOWER(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(b.email)),\\n                            \\' at \\', \\'@\\'), \\',com\\', \\'.com\\'), \\'gmial.\\', \\'gmail.\\')) AS mail) e\\n        CROSS APPLY (SELECT UPPER(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(ISNULL(b.insurance_provider, \\'\\'))),\\n                            \\' \\', \\'\\'), \\'-\\', \\'\\'), \\'.\\', \\'\\')) AS seg) s\\n    ) n\\n    WHERE n.patient_id IS NOT NULL AND n.full_name <> N\\'\\'\\n) p\\nWHERE p.patient_id = p.patient_id_maestro',",
+				"     format: 'query') ~> origen",
+				"origen sink(allowSchemaDrift: true,",
+				"     validateSchema: false,",
+				"     input(",
+				"          patient_id as integer,",
+				"          full_name as string,",
+				"          gender as string,",
+				"          date_of_birth as date,",
+				"          phone as string,",
+				"          email as string,",
+				"          address as string,",
+				"          insurance_provider as string",
+				"     ),",
+				"     deletable:false,",
+				"     insertable:true,",
+				"     updateable:false,",
+				"     upsertable:false,",
+				"     format: 'table',",
+				"     skipDuplicateMapInputs: true,",
+				"     skipDuplicateMapOutputs: true,",
+				"     errorHandlingOption: 'allErrors',",
+				"     transactionCommit: 'single',",
+				"     reportSuccessOnError: false) ~> destino"
+			]
+		}
+	}
+}

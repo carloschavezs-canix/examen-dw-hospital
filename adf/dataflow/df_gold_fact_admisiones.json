@@ -1,0 +1,73 @@
+{
+	"name": "df_gold_fact_admisiones",
+	"properties": {
+		"folder": {
+			"name": "gold"
+		},
+		"type": "MappingDataFlow",
+		"typeProperties": {
+			"sources": [
+				{
+					"dataset": {
+						"referenceName": "ds_dw_bronze_hospital",
+						"type": "DatasetReference"
+					},
+					"name": "origen"
+				}
+			],
+			"sinks": [
+				{
+					"dataset": {
+						"referenceName": "ds_dw_gold_fact_admisiones",
+						"type": "DatasetReference"
+					},
+					"name": "destino"
+				}
+			],
+			"transformations": [],
+			"scriptLines": [
+				"source(output(",
+				"          admission_id_bk as integer,",
+				"          paciente_key as integer,",
+				"          departamento_key as integer,",
+				"          diagnostico_key as integer,",
+				"          fecha_ingreso_key as integer,",
+				"          fecha_alta_key as integer,",
+				"          medico_id as integer,",
+				"          dias_estancia as integer,",
+				"          conteo_admisiones as integer",
+				"     ),",
+				"     allowSchemaDrift: true,",
+				"     validateSchema: false,",
+				"     isolationLevel: 'READ_UNCOMMITTED',",
+				"     query: 'SELECT\\n    a.admission_id AS admission_id_bk,\\n    dp.paciente_key,\\n    dd.departamento_key,\\n    ISNULL(dg.diagnostico_key, sd.diagnostico_key) AS diagnostico_key,\\n    CONVERT(INT, CONVERT(CHAR(8), a.admission_date, 112)) AS fecha_ingreso_key,\\n    CONVERT(INT, CONVERT(CHAR(8), a.discharge_date, 112)) AS fecha_alta_key,\\n    a.attending_doctor_id AS medico_id,\\n    DATEDIFF(DAY, a.admission_date, a.discharge_date) AS dias_estancia,\\n    1 AS conteo_admisiones\\nFROM silver.admissions a\\nJOIN gold.dim_paciente dp     ON dp.patient_id_bk = a.patient_id\\nJOIN gold.dim_departamento dd ON dd.nombre_departamento = a.department\\nLEFT JOIN (\\n    SELECT\\n        admission_id,\\n        CAST(LTRIM(RTRIM(LEFT(icd_code, CHARINDEX(\\',\\', icd_code + \\',\\') - 1))) AS VARCHAR(50)) AS codigo_icd,\\n        CAST(ISNULL(severity, \\'Sin especificar\\') AS VARCHAR(50)) AS nivel_severidad,\\n        ROW_NUMBER() OVER (PARTITION BY admission_id\\n                           ORDER BY CASE severity WHEN \\'Critical\\' THEN 1 WHEN \\'Severe\\' THEN 2\\n                                                  WHEN \\'Moderate\\' THEN 3 WHEN \\'Mild\\' THEN 4 ELSE 5 END,\\n                                    diagnosis_id) AS rn\\n    FROM silver.diagnoses\\n) pr ON pr.admission_id = a.admission_id AND pr.rn = 1\\nLEFT JOIN gold.dim_diagnostico dg ON dg.codigo_icd = pr.codigo_icd AND dg.nivel_severidad = pr.nivel_severidad\\nCROSS JOIN (SELECT diagnostico_key FROM gold.dim_diagnostico WHERE codigo_icd = \\'SIN-DX\\') sd',",
+				"     format: 'query') ~> origen",
+				"origen sink(allowSchemaDrift: true,",
+				"     validateSchema: false,",
+				"     input(",
+				"          admision_key as long,",
+				"          admission_id_bk as integer,",
+				"          paciente_key as integer,",
+				"          departamento_key as integer,",
+				"          diagnostico_key as integer,",
+				"          fecha_ingreso_key as integer,",
+				"          fecha_alta_key as integer,",
+				"          medico_id as integer,",
+				"          dias_estancia as integer,",
+				"          conteo_admisiones as integer",
+				"     ),",
+				"     deletable:false,",
+				"     insertable:true,",
+				"     updateable:false,",
+				"     upsertable:false,",
+				"     truncate:true,",
+				"     format: 'table',",
+				"     skipDuplicateMapInputs: true,",
+				"     skipDuplicateMapOutputs: true,",
+				"     errorHandlingOption: 'allErrors',",
+				"     transactionCommit: 'single',",
+				"     reportSuccessOnError: false) ~> destino"
+			]
+		}
+	}
+}

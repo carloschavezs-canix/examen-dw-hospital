@@ -1,0 +1,58 @@
+{
+	"name": "df_gold_dim_servicio_cargo",
+	"properties": {
+		"folder": {
+			"name": "gold"
+		},
+		"type": "MappingDataFlow",
+		"typeProperties": {
+			"sources": [
+				{
+					"dataset": {
+						"referenceName": "ds_dw_bronze_hospital",
+						"type": "DatasetReference"
+					},
+					"name": "origen"
+				}
+			],
+			"sinks": [
+				{
+					"dataset": {
+						"referenceName": "ds_dw_gold_dim_servicio_cargo",
+						"type": "DatasetReference"
+					},
+					"name": "destino"
+				}
+			],
+			"transformations": [],
+			"scriptLines": [
+				"source(output(",
+				"          tipo_cargo as string,",
+				"          estado_pago as string",
+				"     ),",
+				"     allowSchemaDrift: true,",
+				"     validateSchema: false,",
+				"     isolationLevel: 'READ_UNCOMMITTED',",
+				"     query: 'SELECT DISTINCT\\n    charge_type AS tipo_cargo,\\n    payment_status AS estado_pago\\nFROM silver.billing',",
+				"     format: 'query') ~> origen",
+				"origen sink(allowSchemaDrift: true,",
+				"     validateSchema: false,",
+				"     input(",
+				"          servicio_cargo_key as integer,",
+				"          tipo_cargo as string,",
+				"          estado_pago as string",
+				"     ),",
+				"     deletable:false,",
+				"     insertable:true,",
+				"     updateable:false,",
+				"     upsertable:false,",
+				"     format: 'table',",
+				"     skipDuplicateMapInputs: true,",
+				"     skipDuplicateMapOutputs: true,",
+				"     errorHandlingOption: 'allErrors',",
+				"     transactionCommit: 'single',",
+				"     reportSuccessOnError: false) ~> destino"
+			]
+		}
+	}
+}

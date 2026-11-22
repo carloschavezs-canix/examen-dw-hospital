@@ -1,0 +1,65 @@
+{
+	"name": "df_silver_billing",
+	"properties": {
+		"folder": {
+			"name": "silver"
+		},
+		"type": "MappingDataFlow",
+		"typeProperties": {
+			"sources": [
+				{
+					"dataset": {
+						"referenceName": "ds_dw_bronze_hospital",
+						"type": "DatasetReference"
+					},
+					"name": "origen"
+				}
+			],
+			"sinks": [
+				{
+					"dataset": {
+						"referenceName": "ds_dw_silver_billing",
+						"type": "DatasetReference"
+					},
+					"name": "destino"
+				}
+			],
+			"transformations": [],
+			"scriptLines": [
+				"source(output(",
+				"          billing_id as integer,",
+				"          admission_id as integer,",
+				"          charge_type as string,",
+				"          amount as decimal(12,2),",
+				"          payment_status as string,",
+				"          payment_date as date",
+				"     ),",
+				"     allowSchemaDrift: true,",
+				"     validateSchema: false,",
+				"     isolationLevel: 'READ_UNCOMMITTED',",
+				"     query: 'SELECT f.billing_id, f.admission_id, f.charge_type, f.amount, f.payment_status, f.payment_date\\nFROM (\\n    SELECT\\n        TRY_CAST(LTRIM(RTRIM(b.billing_id)) AS INT) AS billing_id,\\n        TRY_CAST(LTRIM(RTRIM(b.admission_id)) AS INT) AS admission_id,\\n        CASE UPPER(LTRIM(RTRIM(b.charge_type)))\\n            WHEN \\'SURGERY\\' THEN \\'Surgery\\' WHEN \\'MEDICATION\\' THEN \\'Medication\\'\\n            WHEN \\'IMAGING\\' THEN \\'Imaging\\' WHEN \\'ROOM\\' THEN \\'Room\\'\\n            WHEN \\'CONSULTATION\\' THEN \\'Consultation\\' WHEN \\'LAB TEST\\' THEN \\'Lab Test\\'\\n            ELSE \\'Unspecified\\'\\n        END AS charge_type,\\n        CAST(ROUND(TRY_CAST(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(LTRIM(RTRIM(b.amount))),\\n            \\'USD\\', \\'\\'), \\'$\\', \\'\\'), \\',\\', \\'\\'), \\' \\', \\'\\') AS DECIMAL(18,6)), 2) AS DECIMAL(12,2)) AS amount,\\n        CASE UPPER(LTRIM(RTRIM(b.payment_status)))\\n            WHEN \\'PAID\\' THEN \\'Paid\\' WHEN \\'PENDING\\' THEN \\'Pending\\'\\n            WHEN \\'UNPAID\\' THEN \\'Unpaid\\' WHEN \\'OVERDUE\\' THEN \\'Overdue\\'\\n            ELSE \\'Unspecified\\'\\n        END AS payment_status,\\n        silver.fn_Fecha(b.payment_date) AS payment_date\\n    FROM bronze.billing b\\n) f\\nWHERE f.billing_id IS NOT NULL\\n  AND f.amount IS NOT NULL\\n  AND f.amount <= 20000\\n  AND EXISTS (SELECT 1 FROM silver.admissions a WHERE a.admission_id = f.admission_id)',",
+				"     format: 'query') ~> origen",
+				"origen sink(allowSchemaDrift: true,",
+				"     validateSchema: false,",
+				"     input(",
+				"          billing_id as integer,",
+				"          admission_id as integer,",
+				"          charge_type as string,",
+				"          amount as decimal(12,2),",
+				"          payment_status as string,",
+				"          payment_date as date",
+				"     ),",
+				"     deletable:false,",
+				"     insertable:true,",
+				"     updateable:false,",
+				"     upsertable:false,",
+				"     format: 'table',",
+				"     skipDuplicateMapInputs: true,",
+				"     skipDuplicateMapOutputs: true,",
+				"     errorHandlingOption: 'allErrors',",
+				"     transactionCommit: 'single',",
+				"     reportSuccessOnError: false) ~> destino"
+			]
+		}
+	}
+}

@@ -1,0 +1,65 @@
+{
+	"name": "df_silver_admissions",
+	"properties": {
+		"folder": {
+			"name": "silver"
+		},
+		"type": "MappingDataFlow",
+		"typeProperties": {
+			"sources": [
+				{
+					"dataset": {
+						"referenceName": "ds_dw_bronze_hospital",
+						"type": "DatasetReference"
+					},
+					"name": "origen"
+				}
+			],
+			"sinks": [
+				{
+					"dataset": {
+						"referenceName": "ds_dw_silver_admissions",
+						"type": "DatasetReference"
+					},
+					"name": "destino"
+				}
+			],
+			"transformations": [],
+			"scriptLines": [
+				"source(output(",
+				"          admission_id as integer,",
+				"          patient_id as integer,",
+				"          admission_date as date,",
+				"          discharge_date as date,",
+				"          department as string,",
+				"          attending_doctor_id as integer",
+				"     ),",
+				"     allowSchemaDrift: true,",
+				"     validateSchema: false,",
+				"     isolationLevel: 'READ_UNCOMMITTED',",
+				"     query: 'SELECT a.admission_id, sp.patient_id, a.admission_date,\\n    CASE WHEN a.discharge_date < a.admission_date THEN NULL ELSE a.discharge_date END AS discharge_date,\\n    a.department, a.attending_doctor_id\\nFROM (\\n    SELECT\\n        TRY_CAST(LTRIM(RTRIM(b.admission_id)) AS INT) AS admission_id,\\n        TRY_CAST(LTRIM(RTRIM(b.patient_id)) AS INT) AS patient_id_origen,\\n        silver.fn_Fecha(b.admission_date) AS admission_date,\\n        silver.fn_Fecha(b.discharge_date) AS discharge_date,\\n        CASE\\n            WHEN d.dep LIKE \\'CARD%\\' THEN N\\'Cardiology\\'\\n            WHEN d.dep LIKE \\'EMER%\\' OR d.dep = \\'ER\\' THEN N\\'Emergency\\'\\n            WHEN d.dep LIKE \\'GEN%\\' THEN N\\'General Surgery\\'\\n            WHEN d.dep LIKE \\'NEU%\\' OR d.dep LIKE \\'NUE%\\' THEN N\\'Neurology\\'\\n            WHEN d.dep LIKE \\'ONC%\\' THEN N\\'Oncology\\'\\n            WHEN d.dep LIKE \\'ORTH%\\' THEN N\\'Orthopedics\\'\\n            WHEN d.dep LIKE \\'PED%\\' OR d.dep LIKE \\'PAED%\\' THEN N\\'Pediatrics\\'\\n            ELSE N\\'Unspecified\\'\\n        END AS department,\\n        TRY_CAST(LTRIM(RTRIM(b.attending_doctor_id)) AS INT) AS attending_doctor_id\\n    FROM bronze.admissions b\\n    CROSS APPLY (SELECT UPPER(REPLACE(LTRIM(RTRIM(ISNULL(b.department, \\'\\'))), \\' \\', \\'\\')) AS dep) d\\n) a\\nJOIN (\\n    SELECT\\n        TRY_CAST(LTRIM(RTRIM(patient_id)) AS INT) AS patient_id_origen,\\n        MIN(TRY_CAST(LTRIM(RTRIM(patient_id)) AS INT)) OVER (PARTITION BY LOWER(LTRIM(RTRIM(full_name))),\\n            COALESCE(CONVERT(VARCHAR(10), silver.fn_Fecha(date_of_birth), 23), LTRIM(RTRIM(patient_id)))) AS patient_id_maestro\\n    FROM bronze.patients\\n) m ON m.patient_id_origen = a.patient_id_origen\\nJOIN silver.patients sp ON sp.patient_id = m.patient_id_maestro\\nWHERE a.admission_id IS NOT NULL\\n  AND a.admission_date IS NOT NULL\\n  AND a.attending_doctor_id IS NOT NULL',",
+				"     format: 'query') ~> origen",
+				"origen sink(allowSchemaDrift: true,",
+				"     validateSchema: false,",
+				"     input(",
+				"          admission_id as integer,",
+				"          patient_id as integer,",
+				"          admission_date as date,",
+				"          discharge_date as date,",
+				"          department as string,",
+				"          attending_doctor_id as integer",
+				"     ),",
+				"     deletable:false,",
+				"     insertable:true,",
+				"     updateable:false,",
+				"     upsertable:false,",
+				"     format: 'table',",
+				"     skipDuplicateMapInputs: true,",
+				"     skipDuplicateMapOutputs: true,",
+				"     errorHandlingOption: 'allErrors',",
+				"     transactionCommit: 'single',",
+				"     reportSuccessOnError: false) ~> destino"
+			]
+		}
+	}
+}

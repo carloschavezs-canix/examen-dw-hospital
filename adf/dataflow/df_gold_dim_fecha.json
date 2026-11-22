@@ -1,0 +1,79 @@
+{
+	"name": "df_gold_dim_fecha",
+	"properties": {
+		"folder": {
+			"name": "gold"
+		},
+		"type": "MappingDataFlow",
+		"typeProperties": {
+			"sources": [
+				{
+					"dataset": {
+						"referenceName": "ds_dw_bronze_hospital",
+						"type": "DatasetReference"
+					},
+					"name": "origen"
+				}
+			],
+			"sinks": [
+				{
+					"dataset": {
+						"referenceName": "ds_dw_gold_dim_fecha",
+						"type": "DatasetReference"
+					},
+					"name": "destino"
+				}
+			],
+			"transformations": [],
+			"scriptLines": [
+				"source(output(",
+				"          fecha_key as integer,",
+				"          fecha_completa as date,",
+				"          anio as short,",
+				"          trimestre as integer,",
+				"          trimestre_nombre as string,",
+				"          mes as integer,",
+				"          mes_nombre as string,",
+				"          mes_corto as string,",
+				"          semana_anio as integer,",
+				"          dia_mes as integer,",
+				"          dia_semana as integer,",
+				"          dia_nombre as string,",
+				"          es_fin_de_semana as boolean",
+				"     ),",
+				"     allowSchemaDrift: true,",
+				"     validateSchema: false,",
+				"     isolationLevel: 'READ_UNCOMMITTED',",
+				"     query: 'SELECT\\n    CONVERT(INT, CONVERT(CHAR(8), f.fecha, 112)) AS fecha_key,\\n    f.fecha AS fecha_completa,\\n    CAST(YEAR(f.fecha) AS SMALLINT) AS anio,\\n    CAST(DATEPART(QUARTER, f.fecha) AS TINYINT) AS trimestre,\\n    CAST(\\'T\\' + CAST(DATEPART(QUARTER, f.fecha) AS VARCHAR(1)) AS VARCHAR(10)) AS trimestre_nombre,\\n    CAST(MONTH(f.fecha) AS TINYINT) AS mes,\\n    CAST(CHOOSE(MONTH(f.fecha), \\'Enero\\', \\'Febrero\\', \\'Marzo\\', \\'Abril\\', \\'Mayo\\', \\'Junio\\',\\n                \\'Julio\\', \\'Agosto\\', \\'Septiembre\\', \\'Octubre\\', \\'Noviembre\\', \\'Diciembre\\') AS VARCHAR(20)) AS mes_nombre,\\n    CAST(CHOOSE(MONTH(f.fecha), \\'Ene\\', \\'Feb\\', \\'Mar\\', \\'Abr\\', \\'May\\', \\'Jun\\',\\n                \\'Jul\\', \\'Ago\\', \\'Sep\\', \\'Oct\\', \\'Nov\\', \\'Dic\\') AS CHAR(3)) AS mes_corto,\\n    CAST(DATEPART(ISO_WEEK, f.fecha) AS TINYINT) AS semana_anio,\\n    CAST(DAY(f.fecha) AS TINYINT) AS dia_mes,\\n    CAST((DATEDIFF(DAY, \\'19000101\\', f.fecha) % 7) + 1 AS TINYINT) AS dia_semana,\\n    CAST(CHOOSE((DATEDIFF(DAY, \\'19000101\\', f.fecha) % 7) + 1,\\n                \\'Lunes\\', \\'Martes\\', \\'Miercoles\\', \\'Jueves\\', \\'Viernes\\', \\'Sabado\\', \\'Domingo\\') AS VARCHAR(20)) AS dia_nombre,\\n    CAST(CASE WHEN (DATEDIFF(DAY, \\'19000101\\', f.fecha) % 7) >= 5 THEN 1 ELSE 0 END AS BIT) AS es_fin_de_semana\\nFROM (\\n    SELECT admission_date AS fecha FROM silver.admissions\\n    UNION\\n    SELECT discharge_date FROM silver.admissions WHERE discharge_date IS NOT NULL\\n    UNION\\n    SELECT payment_date FROM silver.billing WHERE payment_date IS NOT NULL\\n) f',",
+				"     format: 'query') ~> origen",
+				"origen sink(allowSchemaDrift: true,",
+				"     validateSchema: false,",
+				"     input(",
+				"          fecha_key as integer,",
+				"          fecha_completa as date,",
+				"          anio as integer,",
+				"          trimestre as integer,",
+				"          trimestre_nombre as string,",
+				"          mes as integer,",
+				"          mes_nombre as string,",
+				"          mes_corto as string,",
+				"          semana_anio as integer,",
+				"          dia_mes as integer,",
+				"          dia_semana as integer,",
+				"          dia_nombre as string,",
+				"          es_fin_de_semana as boolean",
+				"     ),",
+				"     deletable:false,",
+				"     insertable:true,",
+				"     updateable:false,",
+				"     upsertable:false,",
+				"     format: 'table',",
+				"     skipDuplicateMapInputs: true,",
+				"     skipDuplicateMapOutputs: true,",
+				"     errorHandlingOption: 'allErrors',",
+				"     transactionCommit: 'single',",
+				"     reportSuccessOnError: false) ~> destino"
+			]
+		}
+	}
+}
